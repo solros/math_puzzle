@@ -1,8 +1,7 @@
-import imageio.v2 as iio
 import numpy as np
 import cv2
 import random
-import sys
+import logging
 import argparse
 
 
@@ -29,6 +28,13 @@ parser.add_argument('--plusmaxresult', type=int, default=20, help="maximal resul
 parser.add_argument('--plusminresult', type=int, default=0, help="minimal result in addition exercises")
 args = parser.parse_args()
 
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
+                    filename='puzzle.log',
+                    encoding='utf-8', 
+                    level=logging.DEBUG)
+
+logger = logging.getLogger('puzzle_generator')
+
 # split image into tiles
 def img2tiles(img, rows, cols):
     M = img.shape[0]//rows
@@ -50,6 +56,7 @@ def scale_image(img, width=1000, height=0):
     orig_height = img.shape[0]
     if height == 0:
         height = int(orig_height/orig_width * width)
+    logger.debug(f"Scaling to {width}x{height}")
     return cv2.resize(img, (width, height))
 
 # apply random permutation to tiles in mxn array
@@ -58,7 +65,7 @@ def permute_tiles(tiles):
     m = len(tiles[0])
     #print(f"m: {m}, n: {n}")
     perm = np.random.permutation(range(m*n))
-    #print(f"perm: {perm}")
+    logger.debug(f"Using permutation {perm}")
     ptiles = np.copy(tiles)
     for i in range(m):
         for j in range(n):
@@ -114,22 +121,29 @@ def random_exercises(args):
     ans_list = []
 
     fails = 0
+    logger.debug(f"Trying to create {n} exercises")
     while len(ex_list) < n:
         q, a = random_exercise(ex_types)
+        logger.debug(f"{q}={a}")
         if a not in ans_list:
             ex_list.append((q, a))
             ans_list.append(a)
         else:
             fails += 1
+            logger.debug("Solution already exists")
             if fails >= n**2:
+                logger.error(f"Cannot find enough unique exercises after {fails} fails.")
                 raise Exception("cannot find enough unique exercises")
+    logger.info(f"exercises: {ex_list}")
     return ex_list
 
 def exercise_types(args):
     ex_types = []
     if args.multi:
+        logger.debug("Using multi")
         ex_types.append(MultiExercise(args.multimaxfactor, args.multiminfactor, args.multimaxresult, args.multiminresult))
     if args.plus:
+        logger.debug("Using plus")
         ex_types.append(PlusExercise(args.plusmaxsummand, args.plusminsummand, args.plusmaxresult, args.plusminresult))
     return ex_types
 
@@ -201,16 +215,18 @@ class RootExercise(Exercise):
 
 
 def tile_and_patch(fn, m, n):
-    img = iio.imread(fn)
+    img = cv2.imread(fn)
     img2 = tiles2img(img2tiles(img, m, n))
-    iio.imwrite(f"{fn.split('.')[0]}_2.jpg", img2)
+    cv2.imwrite(f"{fn.split('.')[0]}_2.jpg", img2)
 
 def tile_permute_patch(args):
     fn = args.file
     m = args.rows
     n = args.cols
-    img = iio.imread(fn)
-    img = scale_image(img)
+    logger.info(f"Making {fn} into {m}x{n} puzzle")
+    img = cv2.imread(fn)
+    if not args.noscale:
+        img = scale_image(img, args.width, args.height)
     tiles = img2tiles(img, m, n)
     grid = create_empty_grid(tiles)
     #ex_list = random_exercises(lambda: random_exercise_times(10, 0), m*n)
@@ -229,11 +245,10 @@ def tile_permute_patch(args):
     tiles = permute_tiles(tiles)
     img2 = tiles2img(tiles)
     grid2 = tiles2img(grid)
-    #iio.imwrite(f"{fn.split('.')[0]}_2.jpg", img2)
-    #iio.imwrite(f"{fn.split('.')[0]}_grid.jpg", grid2)
     both = tiles2img([[grid2, img2]])
     outfile = args.outfile if args.outfile else f"{fn.split('.')[0]}_out.jpg"
-    iio.imwrite(outfile, both)
+    logger.info(f"Writing output to file {outfile}")
+    cv2.imwrite(outfile, both)
     
 
 if __name__ == "__main__":
