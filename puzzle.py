@@ -26,6 +26,8 @@ parser.add_argument('--plusmaxsummand', type=int, default=10, help="maximal fact
 parser.add_argument('--plusminsummand', type=int, default=0, help="minimal factor in addition exercises")
 parser.add_argument('--plusmaxresult', type=int, default=20, help="maximal result in addition exercises")
 parser.add_argument('--plusminresult', type=int, default=0, help="minimal result in addition exercises")
+parser.add_argument('--custom', type=str, help="file containing custom exercises")
+parser.add_argument('--custom_questions', type=int, default=0, help="what column should be used as questions; 0 (default): both at random, 1: first col, 2: second col")
 args = parser.parse_args()
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s',
@@ -145,6 +147,9 @@ def exercise_types(args):
     if args.plus:
         logger.debug("Using plus")
         ex_types.append(PlusExercise(args.plusmaxsummand, args.plusminsummand, args.plusmaxresult, args.plusminresult))
+    if args.custom:
+        logger.debug("Using custom")
+        ex_types.append(CustomExercise(args.custom, args.custom_questions))
     return ex_types
 
 def random_exercise(ex_types):
@@ -213,6 +218,33 @@ class RootExercise(Exercise):
 
         return f"sqrt({a})", str(c)
 
+class CustomExercise(Exercise):
+    def __init__(self, fn, questions=0):
+        self.questions = questions
+        import pandas as pd
+        logging.info(f"Reading custom exercises from {fn}")
+        extension = fn.split(".")[-1]
+        if extension == "xslx":
+            self.df = pd.read_excel(fn, header=None)
+        elif extension == "csv":
+            self.df = pd.read_csv(fn, header=None)
+        print(self.df)
+        self.index = self.df.index.to_list()
+    
+    def qa(self):
+        ind = random.choice(self.index)
+        q, a = self.df[0][ind], self.df[1][ind]
+        logger.debug(f"Randomly picked custom exercise {q}: {a} at index {ind}")
+        if self.questions == 0:
+            if random.random() >= 0.5:
+                logger.debug("Swapping order")
+                q, a = a, q
+        elif self.questions == 2:
+            q, a = a, q
+        return q, a
+
+        
+
 
 def tile_and_patch(fn, m, n):
     img = cv2.imread(fn)
@@ -229,7 +261,6 @@ def tile_permute_patch(args):
         img = scale_image(img, args.width, args.height)
     tiles = img2tiles(img, m, n)
     grid = create_empty_grid(tiles)
-    #ex_list = random_exercises(lambda: random_exercise_times(10, 0), m*n)
     ex_list = random_exercises(args)
     print(ex_list)
     i = -1
