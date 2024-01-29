@@ -14,6 +14,7 @@ parser.add_argument('file', type=str, help="path to input image file")
 parser.add_argument('rows', type=int, help="number of puzzle rows")
 parser.add_argument('cols', type=int, help="number of puzzle columns")
 parser.add_argument('-o', '--outfile', type=str, help="output file name")
+parser.add_argument('-s', '--split', action="store_true", help="split into two files")
 parser.add_argument('--noscale', action="store_true", help="don't scale image, keep original size")
 parser.add_argument('--width', type=int, default=1000, help="width of final image")
 parser.add_argument('--height', type=int, default=0, help="height of final image")
@@ -113,6 +114,7 @@ def add_text(img, txt, size=2, color=(255,255,255), bordercol=(0,0,0)):
     org = ((img.shape[1]-textsize[0])//2, (img.shape[0]+textsize[1])//2)
     r = cv2.putText(img, txt, org, font, fontScale, bordercol, 2*thickness, cv2.LINE_AA)
     return cv2.putText(r, txt, org, font, fontScale, color, thickness, cv2.LINE_AA)
+
 
 
 def random_exercises(args):
@@ -300,13 +302,40 @@ def tile_permute_patch(args):
     if args.rotate:
         img2 = np.rot90(img2, 3)
         grid2 = np.rot90(grid2, 3)
-    dist = np.full((args.hdist, img2.shape[1], 3), 255, dtype=np.uint8)
 
-    both = tiles2img([[grid2, dist, img2]])
     outfile = args.outfile if args.outfile else f"{fn.split('.')[0]}_out.jpg"
-    logger.info(f"Writing output to file {outfile}")
-    cv2.imwrite(outfile, both)
+    if args.split:
+        cv2.imwrite(outfile, img2)
+        outfile_grid = f"{'.'.join(outfile.split('.')[:-1])}_grid.{outfile.split('.')[-1]}"
+        cv2.imwrite(outfile_grid, grid2)
+    else:
+        dist = np.full((args.hdist, img2.shape[1], 3), 255, dtype=np.uint8)
+        both = tiles2img([[grid2, dist, img2]])
+        logger.info(f"Writing output to file {outfile}")
+        cv2.imwrite(outfile, both)
     
+
+import matplotlib.pyplot as plt
+import io
+from PIL import Image, ImageChops
+
+white = (255, 255, 255, 255)
+def latex_to_img(tex):
+    buf = io.BytesIO()
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    plt.axis('off')
+    plt.text(0.05, 0.5, f'${tex}$', size=40)
+    plt.savefig(buf, format='png')
+    plt.close()
+#
+    im = Image.open(buf)
+    bg = Image.new(im.mode, im.size, white)
+    diff = ImageChops.difference(im, bg)
+    diff = ImageChops.add(diff, diff, 2.0, -100)
+    bbox = diff.getbbox()
+    return im.crop(bbox)
+
 
 if __name__ == "__main__":
     tile_permute_patch(args)
