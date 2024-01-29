@@ -3,6 +3,7 @@ import cv2
 import random
 import logging
 import argparse
+#from matplotlib import pyplot as plt
 
 
 desc = """This script creates math (or vocabulary, etc.) puzzles from images.
@@ -16,17 +17,20 @@ parser.add_argument('-o', '--outfile', type=str, help="output file name")
 parser.add_argument('--noscale', action="store_true", help="don't scale image, keep original size")
 parser.add_argument('--width', type=int, default=1000, help="width of final image")
 parser.add_argument('--height', type=int, default=0, help="height of final image")
+parser.add_argument('--hdist', type=int, default=0, help="distance between grid and puzzle")
+parser.add_argument('--rotate', action="store_true", help="rotate image and place side by side (instead of on top of each other)")
 parser.add_argument('--multi', action="store_true", help="use multiplication exercises")
 parser.add_argument('--multimaxfactor', type=int, default=10, help="maximal factor in multiplication exercises")
 parser.add_argument('--multiminfactor', type=int, default=0, help="minimal factor in multiplication exercises")
 parser.add_argument('--multimaxresult', type=int, default=100, help="maximal result in multiplication exercises")
 parser.add_argument('--multiminresult', type=int, default=0, help="minimal result in multiplication exercises")
-parser.add_argument('--plus', action="store_true", help="use addition exercises")
-parser.add_argument('--plusmaxsummand', type=int, default=10, help="maximal factor in addition exercises")
-parser.add_argument('--plusminsummand', type=int, default=0, help="minimal factor in addition exercises")
+parser.add_argument('--plus', action="store_true", help="use plus exercises")
+parser.add_argument('--minus', action="store_true", help="use minus exercises")
+parser.add_argument('--plusmaxsummand', type=int, default=10, help="maximal summand in addition exercises")
+parser.add_argument('--plusminsummand', type=int, default=0, help="minimal summand in addition exercises")
 parser.add_argument('--plusmaxresult', type=int, default=20, help="maximal result in addition exercises")
 parser.add_argument('--plusminresult', type=int, default=0, help="minimal result in addition exercises")
-parser.add_argument('--custom', type=str, help="file containing custom exercises")
+parser.add_argument('--custom', type=str, help="file (xslx or csv) containing custom exercises")
 parser.add_argument('--custom_questions', type=int, default=0, help="what column should be used as questions; 0 (default): both at random, 1: first col, 2: second col")
 args = parser.parse_args()
 
@@ -49,7 +53,7 @@ def tiles2img(tiles):
     n = len(tiles)
     m = len(tiles[0])
     M, N, _ = tiles[0][0].shape
-    img = np.array([[tiles[j][i][I, J] for j in range(n) for J in range(N)] for i in range(m) for I in range(M)])
+    img = np.array([[tiles[j][i][I, J] for j in range(n) for J in range(N)] for i in range(m) for I in range(tiles[0][i].shape[0])])
     return img
 
 # scale image
@@ -96,6 +100,9 @@ def add_border(img, col=np.array([0,0,0]), width=1):
             img[w][j] = col
             img[img.shape[0]-1-w][j] = col
 
+
+#def add_text_plt(img)
+
 # add text to the center of an image
 # default: white with black border
 def add_text(img, txt, size=2, color=(255,255,255), bordercol=(0,0,0)):
@@ -109,7 +116,7 @@ def add_text(img, txt, size=2, color=(255,255,255), bordercol=(0,0,0)):
 
 
 def random_exercises(args):
-    if not (args.multi or args.plus):
+    if not (args.multi or args.plus or args.minus or args.custom):
         args.multi = True
         #raise Exception("No available exercise types")
 
@@ -147,6 +154,9 @@ def exercise_types(args):
     if args.plus:
         logger.debug("Using plus")
         ex_types.append(PlusExercise(args.plusmaxsummand, args.plusminsummand, args.plusmaxresult, args.plusminresult))
+    if args.minus:
+        logger.debug("Using minus")
+        ex_types.append(MinusExercise(args.plusmaxsummand, args.plusminsummand, args.plusmaxresult, args.plusminresult))
     if args.custom:
         logger.debug("Using custom")
         ex_types.append(CustomExercise(args.custom, args.custom_questions))
@@ -176,10 +186,10 @@ class Exercise:
             maxval = self.maxval
         return random.randint(minval, maxval)
 
-class PlusExercise(Exercise):
-    def qa(self):
-        if self.maxval > self.maxres:
-            self.maxval = self.maxres
+class PlusMinusExercise(Exercise):
+    def ops(self):
+        if self.maxval > self.maxres - self.minval:
+            self.maxval = self.maxres - self.minval
         a = self.get_random_operand()
         minval = self.minval if a >= self.minres else self.minres - a
         maxval = self.maxval if self.maxres - a >= self.maxval else self.maxres - a
@@ -189,7 +199,18 @@ class PlusExercise(Exercise):
         if c < self.minres or c > self.maxres:
             raise Exception("result error in plus")
 
+        return a, b, c
+
+class PlusExercise(PlusMinusExercise):
+    def qa(self):
+        a, b, c = self.ops()
         return f"{a}+{b}", str(c)
+
+class MinusExercise(PlusMinusExercise):
+    def qa(self):
+        a, b, c = self.ops()
+        return f"{c}-{a}", str(b)
+
 
 class MultiExercise(Exercise):
     def qa(self):
@@ -262,7 +283,7 @@ def tile_permute_patch(args):
     tiles = img2tiles(img, m, n)
     grid = create_empty_grid(tiles)
     ex_list = random_exercises(args)
-    print(ex_list)
+    print(list(map(lambda a: f"{a[0]}={a[1]}", ex_list)))
     i = -1
     for row in range(len(tiles)):
         for col in range(len(tiles[row])):
@@ -276,7 +297,12 @@ def tile_permute_patch(args):
     tiles = permute_tiles(tiles)
     img2 = tiles2img(tiles)
     grid2 = tiles2img(grid)
-    both = tiles2img([[grid2, img2]])
+    if args.rotate:
+        img2 = np.rot90(img2, 3)
+        grid2 = np.rot90(grid2, 3)
+    dist = np.full((args.hdist, img2.shape[1], 3), 255, dtype=np.uint8)
+
+    both = tiles2img([[grid2, dist, img2]])
     outfile = args.outfile if args.outfile else f"{fn.split('.')[0]}_out.jpg"
     logger.info(f"Writing output to file {outfile}")
     cv2.imwrite(outfile, both)
