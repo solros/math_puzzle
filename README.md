@@ -53,19 +53,19 @@ options:
 
 ## Examples
 
-Create a 5x5 puzzle, by default it uses multiplication exercises, 0x0 up to 10x10:
+Create a 5x5 puzzle, by default it uses multiplication exercises, 0x0 up to 10x10. Use `--rotate` to place the image and grid side by side:
 ```
-python puzzle.py images/regenbogen.jpg 5 5
+python puzzle.py images/regenbogen.jpg 5 5 --rotate
 ```
 ![5x5 mulitplication](images/regenbogen_out_multi.jpg)
 
 Create a 4x4 puzzle with plus and minus exercises 0+0 up to 10+10:
 ```
-python puzzle.py images/regenbogen.jpg 4 4 --plus --minus
+python puzzle.py images/regenbogen.jpg 4 4 --plus --minus --rotate
 ```
 ![4x4 addition](images/regenbogen_out_plus.jpg)
 
-Create 8x5 puzzle with both multiplication and addition. Use white borders in the image and place the image and grid side by side:
+Create 8x5 puzzle with both multiplication and addition. Use white borders in the image:
 ```
 python puzzle.py images/farben_leuchten_schwarz.jpg 8 5 --bordercol=255,255,255 --rotate --plus --minus --multi --plusmaxresult 100 --plusmaxsummand 100 --width 1500
 ```
