@@ -18,7 +18,8 @@ parser.add_argument('-s', '--split', action="store_true", help="split into two f
 parser.add_argument('--noscale', action="store_true", help="don't scale image, keep original size")
 parser.add_argument('--width', type=int, default=1000, help="width of final image")
 parser.add_argument('--height', type=int, default=0, help="height of final image")
-parser.add_argument('--hdist', type=int, default=0, help="distance between grid and puzzle")
+parser.add_argument('--hdist', type=int, default=50, help="distance between grid and puzzle")
+parser.add_argument('--bordercol', type=str, default='0,0,0', help="distance between grid and puzzle")
 parser.add_argument('--rotate', action="store_true", help="rotate image and place side by side (instead of on top of each other)")
 parser.add_argument('--multi', action="store_true", help="use multiplication exercises")
 parser.add_argument('--multimaxfactor', type=int, default=10, help="maximal factor in multiplication exercises")
@@ -92,6 +93,9 @@ def create_empty_grid(tiles):
 
 # add border to an image
 def add_border(img, col=np.array([0,0,0]), width=1):
+    if type(col) == str:
+        col = tuple(col.split(','))
+
     for i in range(img.shape[0]):
         for w in range(width):
             img[i][w] = col
@@ -135,7 +139,7 @@ def tile_permute_patch(args):
 
     # create list of random exercises
     ex_list = random_exercises(args)
-    print(list(map(lambda a: f"{a[0]}={a[1]}", ex_list)))
+    #print(list(map(lambda a: f"{a[0]}={a[1]}", ex_list)))
 
     i = -1
     for row in range(len(tiles)):
@@ -145,7 +149,7 @@ def tile_permute_patch(args):
 
             # add anser to image tile
             t = tiles[row][col]
-            add_border(t)
+            add_border(t, col=args.bordercol)
             t = add_text(t, a)
             tiles[row][col] = t
             # add question to grid tile
@@ -165,6 +169,7 @@ def tile_permute_patch(args):
     outfile = args.outfile if args.outfile else f"{fn.split('.')[0]}_out.jpg"
 
     if args.split:
+        print("splitting")
         # two files for image and grid
         outfile_grid = f"{'.'.join(outfile.split('.')[:-1])}_grid.{outfile.split('.')[-1]}"
         logger.info(f"Writing output to files {outfile} and {outfile_grid}")
